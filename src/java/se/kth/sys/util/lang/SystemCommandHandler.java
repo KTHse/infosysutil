@@ -2,6 +2,7 @@ package se.kth.sys.util.lang;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -20,6 +21,7 @@ public class SystemCommandHandler implements LineReceiver {
     private List<String> stdOutStore = null;
     private List<String> stdErrStore = null;
     private int exitCode = -1;
+    private Process process;
     protected ReadLineThread outlog;
     protected ReadLineThread errlog;
     private Map<String, String> env = null;
@@ -59,23 +61,49 @@ public class SystemCommandHandler implements LineReceiver {
     }
 
     /**
-     * Executes the command and waits for it to complete.
+     * Executes the command without any input and waits for it to complete.
      * Afterwards you need to call getExitCode(), getStdOutIOException() and getStdErrIOException().
      * @throws IOException
      * @throws InterruptedException
      */
     public void executeAndWait() throws IOException, InterruptedException {
-        Runtime runtime = Runtime.getRuntime();
-        Process process = runtime.exec(getPwCommandLine(), getEnvP(), dir);
+        execute();
+        getOutputStream().close();
+        joinProcess();
+    }
 
-        process.getOutputStream().close();
+    /**
+     * Executes the command.
+     * Afterwards you need to call getOutputStream().close(), joinProcess(), getExitCode(), getStdOutIOException() and getStdErrIOException().
+     * @throws IOException
+     */
+    public void execute() throws IOException {
+        Runtime runtime = Runtime.getRuntime();
+        process = runtime.exec(getPwCommandLine(), getEnvP(), dir);
 
         outlog = new ReadLineThread(process.getInputStream(), StreamId.STDOUT, this);
         errlog = new ReadLineThread(process.getErrorStream(), StreamId.STDERR, this);
 
         outlog.start();
         errlog.start();
+    }
 
+    /**
+     * Returns the stream used to provide input to the process.
+     * You need to close() it and then call joinProcess().
+     * Afterwards you need to call getExitCode(), getStdOutIOException() and getStdErrIOException().
+     */
+    public OutputStream getOutputStream() {
+        return process.getOutputStream();
+    }
+
+    /**
+     * Waits for the process to complete.
+     * Afterwards you need to call getExitCode(), getStdOutIOException() and getStdErrIOException().
+     * @throws IOException
+     * @throws InterruptedException
+     */
+    public void joinProcess() throws InterruptedException, IOException {
         exitCode = process.waitFor();
 
         // Wait for all output to be logged.
@@ -210,7 +238,7 @@ public class SystemCommandHandler implements LineReceiver {
      * @return
      */
     private String[] getPwCommandLine() {
-        String[] argv = commandline.toArray(new String[] {});
+        String[] argv = commandline.toArray(new String[commandline.size()]);
         if (passwordval != null) {
             argv[passwordindex] = passwordval;
         }
